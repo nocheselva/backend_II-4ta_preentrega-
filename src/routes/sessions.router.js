@@ -1,13 +1,31 @@
 import { Router } from 'express';
+import passport from 'passport';
 import { SessionsController } from '../controllers/sessions.controller.js';
-import { authMiddleware } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 const sessionsController = new SessionsController();
 
-router.post('/register', (req, res) => sessionsController.register(req, res));
-router.post('/login', (req, res) => sessionsController.login(req, res));
-router.get('/current', authMiddleware, (req, res) => sessionsController.current(req, res));
-router.post('/logout', (req, res) => sessionsController.logout(req, res));
+// Custom Middleware para formatear las respuestas de error de Passport
+const customAuthenticate = (strategy) => {
+  return (req, res, next) => {
+    passport.authenticate(strategy, { session: false }, (err, user, info) => {
+      if (err) return next(err);
+      if (!user) {
+        return res.status(strategy === 'register' ? 400 : 401).json({
+          status: 'error',
+          message: info?.message || 'Error de autenticación'
+        });
+      }
+      req.user = user;
+      next();
+    })(req, res, next);
+  };
+};
+
+// Rutas centralizadas con Passport
+router.post('/register', customAuthenticate('register'), sessionsController.register);
+router.post('/login', customAuthenticate('login'), sessionsController.login);
+router.get('/current', customAuthenticate('current'), sessionsController.current);
+router.post('/logout', sessionsController.logout);
 
 export default router;
